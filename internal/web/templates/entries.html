@@ -1,0 +1,82 @@
+{{define "entries"}}{{template "head" .}}
+{{template "flash" .}}
+<section class="nc-panel" data-label="Add entries">
+  <form class="nc-form nc-add" method="post" action="/entries/add">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input type="hidden" name="back" value="{{.Back}}">
+    <label class="nc-grow">
+      <span class="nc-sr">Domains or IP addresses</span>
+      <input type="text" name="data" placeholder="example.com, 192.0.2.1 ..." autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="url" required data-shortcut="a" data-shortcut-action="focus">
+    </label>
+    <label>
+      <span class="nc-sr">List</span>
+      <select name="list">
+        <option value="white" selected>Whitelist</option>
+        <option value="grey">Greylist</option>
+        <option value="black">Blacklist</option>
+      </select>
+    </label>
+    <button class="nc-button" type="submit">Add</button>
+  </form>
+  <p class="nc-help">Separate several entries with spaces or commas. The filter whitelists a sender if the rDNS name of its host matches on the domain or one level below (e.g. <i>example.com</i> covers <i>mail.example.com</i>).</p>
+</section>
+
+<section class="nc-panel" data-label="Entries">
+  <form class="nc-toolbar" method="get" action="/" role="search">
+    <label class="nc-grow">
+      <span class="nc-sr">Filter</span>
+      <input type="search" name="q" value="{{.Query}}" placeholder="filter..." autocapitalize="none" autocorrect="off" spellcheck="false" data-shortcut="f" data-shortcut-action="focus" data-live-filter>
+    </label>
+    {{if .List}}<input type="hidden" name="list" value="{{.List}}">{{end}}
+    {{if ne .Sort "seen"}}<input type="hidden" name="sort" value="{{.Sort}}">{{end}}
+    <input type="hidden" name="dir" value="{{.Dir}}">
+    <button class="nc-button nc-nojs" type="submit">Filter</button>
+  </form>
+  <nav class="nc-tabs" aria-label="Lists">
+    {{range .Tabs}}<a class="nc-tab{{if .Active}} nc-tab-active{{end}}{{if .Key}} nc-l-{{.Key}}{{end}}" href="{{.URL}}"{{if .Active}} aria-current="page"{{end}}>{{.Label}} <span class="nc-tab-count">{{.Count}}</span></a>{{end}}
+  </nav>
+  <div class="nc-sortbar">Sort:
+    {{range .Columns}}<a href="{{.URL}}"{{if .Active}} class="nc-sort-active"{{end}}>{{.Label}}{{if .Active}}{{if .Desc}}&#9660;{{else}}&#9650;{{end}}{{end}}</a>{{end}}
+  </div>
+
+  <form method="post" action="/entries/action" id="entries-form">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input type="hidden" name="back" value="{{.Back}}">
+    <table class="nc-table nc-entries">
+      <thead>
+        <tr>
+          <th class="nc-col-sel"><input type="checkbox" aria-label="Select all shown" data-select-all></th>
+          {{range .Columns}}<th class="nc-col-{{.Key}}"{{if .Active}} aria-sort="{{if .Desc}}descending{{else}}ascending{{end}}"{{end}}><a href="{{.URL}}">{{.Label}}{{if .Active}}{{if .Desc}}&#9660;{{else}}&#9650;{{end}}{{end}}</a></th>{{end}}
+          <th class="nc-col-actions"><span class="nc-sr">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Entries}}
+        <tr data-filter="{{.Data}}">
+          <td class="nc-col-sel"><input type="checkbox" name="sel" value="{{.Data}}" aria-label="Select {{.Data}}"></td>
+          <td class="nc-col-data">{{.Data}}</td>
+          <td class="nc-col-list"><span class="nc-badge nc-l-{{.List}}">{{listLabel .List}}</span></td>
+          <td class="nc-col-seen"><time datetime="{{.LastSeenISO}}" title="{{.LastSeen}}">{{.LastSeen}}</time> <span class="nc-ago">{{.Ago}}</span></td>
+          <td class="nc-col-count"><span class="nc-hits">{{.Count}}</span><span class="nc-hits-label"> hits</span></td>
+          <td class="nc-col-actions">
+            {{if ne (print .List) "white"}}<button class="nc-button nc-small nc-act-white" type="submit" name="row" value="white:{{.Data}}" title="Whitelist {{.Data}}">White</button>{{end}}
+            {{if ne (print .List) "black"}}<button class="nc-button nc-small nc-act-black" type="submit" name="row" value="black:{{.Data}}" title="Blacklist {{.Data}}">Black</button>{{end}}
+            <button class="nc-button nc-small nc-act-delete" type="submit" name="row" value="delete:{{.Data}}" title="Delete {{.Data}}" data-confirm="Delete {{.Data}}?">Del</button>
+          </td>
+        </tr>
+        {{else}}
+        <tr class="nc-empty"><td colspan="6">{{if .Total}}No entries match.{{else}}greylistd has no entries yet.{{end}}</td></tr>
+        {{end}}
+        <tr class="nc-empty nc-filter-empty" hidden><td colspan="6">No entries match.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="nc-bulkbar" data-bulkbar>
+      <span class="nc-bulk-count"><b data-selected-count>0</b> selected</span>
+      <button class="nc-button nc-act-white" type="submit" name="bulk" value="white" data-shortcut="w" data-bulk><u>W</u>hitelist</button>
+      <button class="nc-button nc-act-black" type="submit" name="bulk" value="black" data-shortcut="b" data-bulk><u>B</u>lacklist</button>
+      <button class="nc-button nc-act-delete" type="submit" name="bulk" value="delete" data-shortcut="d" data-bulk data-confirm="Delete the selected entries?"><u>D</u>elete</button>
+    </div>
+  </form>
+</section>
+{{template "foot" .}}{{end}}

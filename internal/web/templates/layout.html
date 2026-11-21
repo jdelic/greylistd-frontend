@@ -1,0 +1,47 @@
+{{define "head"}}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#00a8a8">
+<title>{{.Title}} - greylistd</title>
+<link rel="icon" href="/static/favicon.svg?v={{.StaticTag}}" type="image/svg+xml">
+<link rel="stylesheet" href="/static/app.css?v={{.StaticTag}}">
+<script src="/static/app.js?v={{.StaticTag}}" defer></script>
+</head>
+<body>
+<div class="nc-screen">
+  <header class="nc-topbar">
+    <span class="nc-brand">greylistd</span>
+    {{if .User}}
+    <nav class="nc-navs">
+      <a class="nc-nav{{if eq .Active "entries"}} nc-nav-active{{end}}" href="/" data-shortcut="e"><u>E</u>ntries</a>
+      <a class="nc-nav{{if eq .Active "stats"}} nc-nav-active{{end}}" href="/stats" data-shortcut="s"><u>S</u>tats</a>
+    </nav>
+    <div class="nc-spacer"></div>
+    <span class="nc-user" title="{{.User}}">{{.User}}</span>
+    <form class="nc-inline-form" method="post" action="/logout">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <button type="submit" class="nc-nav nc-logout" data-shortcut="l" title="Logged in as {{.User}}"><u>L</u>ogout</button>
+    </form>
+    {{end}}
+  </header>
+  <main class="nc-content">
+{{end}}
+
+{{define "foot"}}
+  </main>
+  <footer class="nc-footer">
+    <span class="nc-fkeys">{{if eq .Active "entries"}}<span><b>Alt+A</b>Add</span><span><b>Alt+F</b>Filter</span><span><b>Alt+W</b>White</span><span><b>Alt+B</b>Black</span><span><b>Alt+D</b>Delete</span>{{end}}</span>
+    <span class="nc-version">{{.Version}}</span>
+    <span class="nc-status">{{if .Error}}ERROR{{else if eq .Active "entries"}}{{.Total}} ITEMS{{else}}READY{{end}}</span>
+  </footer>
+</div>
+</body>
+</html>
+{{end}}
+
+{{define "flash"}}
+{{if .Flash}}{{if .Flash.Message}}<div class="nc-msg nc-msg-ok" role="status">{{.Flash.Message}}</div>{{end}}{{if .Flash.Error}}<div class="nc-msg nc-msg-err" role="alert">{{.Flash.Error}}</div>{{end}}{{end}}
+{{if .Error}}<div class="nc-msg nc-msg-err" role="alert">{{.Error}}</div>{{end}}
+{{end}}

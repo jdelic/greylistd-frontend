@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  # Lets the release workflow run the same checks before publishing.
+  workflow_call:
+
+# Cancel superseded runs on the same ref (but never a release's checks).
+concurrency:
+  group: ci-${{ github.workflow_ref }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_call' && !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: go mod tidy is clean
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -race -count=1 ./...
+
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+        run: go build -trimpath -o greylistd-frontend ./cmd/greylistd-frontend
+
+  docker:
+    name: docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Build only (no push) to make sure the image still builds and starts.
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: greylistd-frontend:ci
+          build-args: |
+            VERSION=ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test image
+        run: |
+          docker run --rm greylistd-frontend:ci --version
+          docker run -d --name glf -p 8080:8080 \
+            -e GREYLISTD_FRONTEND_AUTH_USERNAME=ci \
+            -e GREYLISTD_FRONTEND_AUTH_PASSWORD=ci \
+            greylistd-frontend:ci
+          for _ in $(seq 1 20); do
+            if curl -fsS -o /dev/null http://localhost:8080/login; then break; fi
+            sleep 0.5
+          done
+          curl -fsS http://localhost:8080/login | grep -q 'name="username"'
+          # No greylistd in CI: the health check must report that.
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/healthz)" = 503
+          docker logs glf
+          docker rm -f glf

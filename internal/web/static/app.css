@@ -1,0 +1,687 @@
+/* greylistd-frontend — 90s DOS/TUI look following artifactsd's admin UI
+   (blue screen, cyan menu/status bars, ridge-bordered panels, VT323 font).
+   Mobile-first: the base rules target phones; the min-width media query at
+   the bottom turns the entry cards into a classic table on wider screens. */
+
+@font-face {
+  font-family: "VT323";
+  src: url("fonts/vt323.woff2") format("woff2");
+  font-display: swap;
+}
+
+:root {
+  --nc-blue: #0000a8;
+  --nc-cyan: #00a8a8;
+  --nc-cyan-bright: #54fcfc;
+  --nc-yellow: #fcfc54;
+  --nc-white: #fcfcfc;
+  --nc-red: #fc5454;
+  --nc-dark-red: #a80000;
+  --nc-green: #54fc54;
+  --nc-grey: #a8a8a8;
+  --nc-magenta: #fc54fc;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background: #000;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  font-family: "VT323", ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 21px;
+  line-height: 1.15;
+  color: var(--nc-white);
+  overflow-x: clip;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* Visually hidden, but read by screen readers. */
+.nc-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.nc-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--nc-blue);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* ---- top bar / footer ------------------------------------------------- */
+
+.nc-topbar,
+.nc-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  background: var(--nc-cyan);
+  color: #000;
+  font-size: 18px;
+  flex: 0 0 auto;
+}
+
+.nc-topbar {
+  min-height: 36px;
+  padding-top: env(safe-area-inset-top);
+}
+
+.nc-brand {
+  padding: 3px 10px;
+  background: var(--nc-blue);
+  color: var(--nc-yellow);
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+}
+
+.nc-navs {
+  display: flex;
+}
+
+.nc-nav {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 3px 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.nc-nav u,
+.nc-bulkbar u {
+  color: var(--nc-dark-red);
+  font-weight: bold;
+  text-decoration: none;
+}
+
+.nc-nav-active,
+.nc-nav:hover {
+  background: var(--nc-cyan-bright);
+}
+
+.nc-spacer {
+  flex: 1;
+}
+
+.nc-user {
+  padding: 0 10px;
+  color: var(--nc-blue);
+  min-width: 0;
+  max-width: 50vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nc-logout {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.nc-inline-form {
+  display: inline;
+}
+
+.nc-footer {
+  min-height: 28px;
+  padding: 0 4px;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* The keyboard hints are useless on touch screens; show them where a
+   keyboard is likely (see the min-width query). */
+.nc-fkeys {
+  display: none;
+}
+
+.nc-fkeys b {
+  color: var(--nc-dark-red);
+  margin-right: 3px;
+}
+
+.nc-fkeys span {
+  margin-right: 12px;
+}
+
+.nc-version {
+  margin-left: auto;
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+.nc-status {
+  padding: 0 10px;
+  background: var(--nc-yellow);
+  font-weight: bold;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+}
+
+/* ---- content & panels ------------------------------------------------- */
+
+.nc-content {
+  flex: 1;
+  padding: 20px 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+}
+
+.nc-panel {
+  position: relative;
+  border: 3px ridge var(--nc-cyan-bright);
+  padding: 18px 10px 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.nc-panel::before {
+  content: attr(data-label);
+  position: absolute;
+  top: -14px;
+  left: 14px;
+  background: var(--nc-blue);
+  color: var(--nc-cyan-bright);
+  padding: 0 8px;
+  font-weight: bold;
+}
+
+.nc-help {
+  margin: 10px 0 0;
+  font-size: 17px;
+  color: var(--nc-grey);
+}
+
+.nc-help i {
+  font-style: normal;
+  color: var(--nc-cyan-bright);
+}
+
+.nc-msg {
+  padding: 6px 10px;
+  border: 1px solid currentColor;
+}
+
+.nc-msg-ok {
+  color: var(--nc-cyan-bright);
+}
+
+.nc-msg-err {
+  color: #000;
+  background: var(--nc-red);
+  border-color: var(--nc-red);
+}
+
+.nc-pre {
+  margin: 0;
+  font: inherit;
+  white-space: pre-wrap;
+}
+
+/* ---- forms ------------------------------------------------------------ */
+
+.nc-form,
+.nc-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.nc-form label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nc-grow {
+  flex: 1 1 14em;
+  display: flex;
+  min-width: 0;
+}
+
+input[type="text"],
+input[type="search"],
+input[type="password"],
+select {
+  font-family: inherit;
+  /* >= 16px keeps iOS from zooming into focused fields. */
+  font-size: 21px;
+  background: var(--nc-white);
+  color: #000;
+  border: 2px solid #000;
+  border-radius: 0;
+  padding: 4px 6px;
+  min-height: 40px;
+  min-width: 0;
+  width: 100%;
+}
+
+select {
+  width: auto;
+}
+
+input::placeholder {
+  color: #5a5a5a;
+  opacity: 1;
+}
+
+input:focus-visible,
+select:focus-visible,
+.nc-button:focus-visible,
+a:focus-visible,
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--nc-yellow);
+  outline-offset: 1px;
+}
+
+input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--nc-cyan);
+  cursor: pointer;
+}
+
+.nc-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  font-size: inherit;
+  background: var(--nc-cyan);
+  color: #000;
+  border: 2px solid var(--nc-white);
+  border-right-color: #000;
+  border-bottom-color: #000;
+  border-radius: 0;
+  padding: 4px 16px;
+  min-height: 40px;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.nc-button:hover {
+  background: var(--nc-cyan-bright);
+}
+
+.nc-button:active {
+  border-color: #000;
+  border-right-color: var(--nc-white);
+  border-bottom-color: var(--nc-white);
+}
+
+.nc-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.nc-button:disabled:hover {
+  background: var(--nc-cyan);
+}
+
+.nc-small {
+  padding: 2px 10px;
+  min-height: 36px;
+}
+
+.nc-act-delete {
+  background: var(--nc-grey);
+}
+
+.nc-act-delete:hover {
+  background: var(--nc-red);
+}
+
+.nc-add select {
+  flex: 0 0 auto;
+}
+
+/* With JS the filter applies while typing; the button is a no-JS fallback. */
+.js .nc-nojs {
+  display: none;
+}
+
+/* ---- login ------------------------------------------------------------ */
+
+.nc-login {
+  width: 100%;
+  max-width: 26em;
+  margin: 8vh auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.nc-button-wide {
+  width: 100%;
+}
+
+.nc-form-stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.nc-form-stack label {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  color: var(--nc-cyan-bright);
+}
+
+.nc-or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--nc-grey);
+}
+
+.nc-or::before,
+.nc-or::after {
+  content: "";
+  flex: 1;
+  border-top: 1px dashed var(--nc-cyan);
+}
+
+/* ---- list tabs and sorting -------------------------------------------- */
+
+.nc-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 12px 0 6px;
+}
+
+.nc-tab {
+  padding: 4px 10px;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--nc-white);
+  text-decoration: none;
+  border: 1px solid var(--nc-cyan);
+}
+
+.nc-tab:hover {
+  border-color: var(--nc-cyan-bright);
+}
+
+.nc-tab-active {
+  background: var(--nc-cyan);
+  color: #000;
+}
+
+.nc-tab-count {
+  color: var(--nc-yellow);
+}
+
+.nc-tab-active .nc-tab-count {
+  color: var(--nc-blue);
+}
+
+.nc-sortbar {
+  font-size: 17px;
+  color: var(--nc-grey);
+  margin-bottom: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
+
+.nc-sortbar a {
+  color: var(--nc-cyan-bright);
+  text-decoration: none;
+}
+
+.nc-sortbar a.nc-sort-active {
+  color: var(--nc-yellow);
+}
+
+/* ---- badges ----------------------------------------------------------- */
+
+.nc-badge {
+  display: inline-block;
+  white-space: nowrap;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  font-size: 17px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.nc-l-white { color: var(--nc-green); }
+.nc-l-grey { color: var(--nc-grey); }
+.nc-l-black { color: var(--nc-red); }
+
+.nc-tab-active.nc-l-white,
+.nc-tab-active.nc-l-grey,
+.nc-tab-active.nc-l-black {
+  color: #000;
+}
+
+/* ---- entries: cards on phones ----------------------------------------- */
+
+.nc-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.nc-entries thead {
+  display: none;
+}
+
+.nc-entries tbody,
+.nc-entries tr,
+.nc-entries td {
+  display: block;
+}
+
+.nc-entries tbody tr {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "sel  data  list"
+    ".    seen  count"
+    ".    acts  acts";
+  gap: 4px 8px;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--nc-cyan);
+}
+
+.nc-entries tbody tr.nc-empty {
+  display: block;
+  color: var(--nc-grey);
+}
+
+.nc-entries tbody tr.nc-selected {
+  background: rgba(84, 252, 252, 0.12);
+}
+
+.nc-col-sel { grid-area: sel; align-self: start; padding-top: 1px; }
+.nc-col-data { grid-area: data; color: var(--nc-yellow); font-size: 23px; overflow-wrap: anywhere; }
+.nc-col-list { grid-area: list; text-align: right; }
+.nc-col-seen { grid-area: seen; color: var(--nc-grey); font-size: 18px; }
+.nc-col-count { grid-area: count; text-align: right; color: var(--nc-grey); font-size: 18px; }
+.nc-col-actions { grid-area: acts; display: flex !important; gap: 6px; flex-wrap: wrap; }
+
+.nc-hits {
+  color: var(--nc-white);
+}
+
+.nc-ago {
+  color: var(--nc-cyan);
+}
+
+/* Bulk actions stick to the bottom of the screen while scrolling a long
+   list on a phone. */
+.nc-bulkbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 10px -10px -12px;
+  padding: 8px 10px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  background: var(--nc-blue);
+  border-top: 3px ridge var(--nc-cyan-bright);
+}
+
+.nc-bulk-count {
+  flex: 1 0 100%;
+  color: var(--nc-cyan-bright);
+  font-size: 18px;
+}
+
+.nc-bulk-count b {
+  color: var(--nc-yellow);
+  font-weight: normal;
+}
+
+.nc-bulkbar .nc-button {
+  flex: 1 1 0;
+}
+
+/* Very narrow phones: the e-mail address would push Logout onto a second
+   row; it stays available as the Logout button's tooltip. */
+@media (max-width: 520px) {
+  .nc-user {
+    display: none;
+  }
+}
+
+/* ---- larger screens --------------------------------------------------- */
+
+@media (min-width: 760px) {
+  .nc-content {
+    padding: 24px 16px 16px;
+  }
+
+  .nc-panel {
+    padding: 18px 14px 14px;
+  }
+
+  .nc-fkeys {
+    display: inline;
+  }
+
+  .nc-topbar .nc-nav {
+    padding: 3px 14px;
+  }
+
+  .nc-sortbar {
+    display: none;
+  }
+
+  .nc-entries thead {
+    display: table-header-group;
+  }
+
+  .nc-entries tbody {
+    display: table-row-group;
+  }
+
+  .nc-entries tr,
+  .nc-entries tbody tr {
+    display: table-row;
+  }
+
+  .nc-entries tbody tr.nc-empty {
+    display: table-row;
+  }
+
+  .nc-entries th,
+  .nc-entries td {
+    display: table-cell;
+    text-align: left;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--nc-cyan);
+    vertical-align: middle;
+  }
+
+  .nc-entries tbody tr {
+    border: 0;
+  }
+
+  .nc-entries th {
+    color: var(--nc-cyan-bright);
+    text-transform: uppercase;
+    font-size: 16px;
+    font-weight: normal;
+    white-space: nowrap;
+  }
+
+  .nc-entries th a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .nc-entries th a:hover {
+    color: var(--nc-yellow);
+  }
+
+  .nc-entries th[aria-sort] a {
+    color: var(--nc-yellow);
+  }
+
+  .nc-entries tbody tr:hover {
+    background: rgba(84, 252, 252, 0.08);
+  }
+
+  .nc-col-sel { width: 34px; }
+  .nc-col-data { font-size: 21px; }
+  .nc-col-list { text-align: left; width: 1%; }
+  .nc-col-seen { white-space: nowrap; width: 1%; }
+  .nc-col-count { text-align: right; width: 1%; }
+  .nc-entries th.nc-col-count { text-align: right; }
+  .nc-hits-label { display: none; }
+  .nc-col-actions { display: table-cell !important; white-space: nowrap; width: 1%; text-align: right; }
+  .nc-col-actions .nc-button { margin-left: 4px; }
+  .nc-small { min-height: 30px; padding: 1px 10px; }
+
+  .nc-bulkbar {
+    position: static;
+    margin: 12px 0 0;
+    padding: 0;
+    border: 0;
+    flex-wrap: nowrap;
+  }
+
+  .nc-bulk-count {
+    flex: 0 0 auto;
+    margin-right: 8px;
+  }
+
+  .nc-bulkbar .nc-button {
+    flex: 0 0 auto;
+  }
+}

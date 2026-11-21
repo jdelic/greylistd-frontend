@@ -1,0 +1,17 @@
+{{define "login"}}{{template "head" .}}
+<section class="nc-panel nc-login" data-label="Login">
+  {{if .Error}}<div class="nc-msg nc-msg-err" role="alert">{{.Error}}</div>{{end}}
+  {{if .OIDCEnabled}}
+  <a class="nc-button nc-button-wide" href="/auth/oidc/start" data-shortcut="o">Sign in with {{.OIDCName}}</a>
+  {{end}}
+  {{if and .OIDCEnabled .PasswordLogin}}<div class="nc-or"><span>or</span></div>{{end}}
+  {{if .PasswordLogin}}
+  <form class="nc-form nc-form-stack" method="post" action="/login">
+    <input type="hidden" name="csrf" value="{{.LoginCSRF}}">
+    <label>Username <input type="text" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required {{if not .OIDCEnabled}}autofocus{{end}}></label>
+    <label>Password <input type="password" name="password" autocomplete="current-password" required></label>
+    <button class="nc-button" type="submit">Login</button>
+  </form>
+  {{end}}
+</section>
+{{template "foot" .}}{{end}}
