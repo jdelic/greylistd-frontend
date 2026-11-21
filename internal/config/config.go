@@ -47,6 +47,10 @@ type Config struct {
 	AuthUsername string
 	AuthPassword string
 
+	// AllowAnonymous grants everybody access when no login method is
+	// configured.
+	AllowAnonymous bool
+
 	ShowVersion bool
 }
 
@@ -86,6 +90,8 @@ func Load(args []string, getenv func(string) string, stderr io.Writer) (*Config,
 
 	fs.StringVar(&c.AuthUsername, "auth-username", "", "username for the optional password login")
 	fs.StringVar(&c.AuthPassword, "auth-password", "", "password for the optional password login (prefer the environment variable)")
+
+	fs.BoolVar(&c.AllowAnonymous, "allow-anonymous", false, "without any login method configured, give everybody who can reach the server full access (only behind other access control)")
 
 	fs.BoolVar(&c.ShowVersion, "version", false, "print the version and exit")
 
@@ -151,8 +157,8 @@ func (c *Config) validate() error {
 		}
 		c.BaseURL = strings.TrimRight(c.BaseURL, "/")
 	}
-	if !c.OIDCEnabled() && !c.PasswordEnabled() {
-		errs = append(errs, errors.New("no login method configured: set --oidc-issuer and/or --auth-username/--auth-password"))
+	if c.AllowAnonymous && (c.OIDCEnabled() || c.PasswordEnabled()) {
+		errs = append(errs, errors.New("--allow-anonymous cannot be combined with a login method (--oidc-issuer, --auth-username)"))
 	}
 	if (c.AuthUsername == "") != (c.AuthPassword == "") {
 		errs = append(errs, errors.New("--auth-username and --auth-password must be set together"))
@@ -187,6 +193,9 @@ func (c *Config) OIDCEnabled() bool { return c.OIDCIssuer != "" }
 
 // PasswordEnabled reports whether the username/password login is configured.
 func (c *Config) PasswordEnabled() bool { return c.AuthUsername != "" && c.AuthPassword != "" }
+
+// LoginConfigured reports whether at least one login method is configured.
+func (c *Config) LoginConfigured() bool { return c.OIDCEnabled() || c.PasswordEnabled() }
 
 // Location returns the configured time zone (UTC if unset).
 func (c *Config) Location() *time.Location {

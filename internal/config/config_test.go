@@ -38,7 +38,7 @@ func TestValidation(t *testing.T) {
 		args []string
 		want string
 	}{
-		"no login":         {nil, "no login method"},
+		"anon and login":   {[]string{"--allow-anonymous", "--auth-username", "a", "--auth-password", "b"}, "cannot be combined"},
 		"half password":    {[]string{"--auth-username", "a"}, "must be set together"},
 		"oidc no base url": {[]string{"--oidc-issuer", "https://idp", "--oidc-client-id", "x", "--oidc-allow-any-user"}, "--base-url is required"},
 		"oidc no allow":    {[]string{"--oidc-issuer", "https://idp", "--oidc-client-id", "x", "--base-url", "https://a"}, "--oidc-allowed-emails"},
@@ -49,6 +49,14 @@ func TestValidation(t *testing.T) {
 		_, err := Load(tc.args, env(nil), io.Discard)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: got %v, want error containing %q", name, err, tc.want)
+		}
+	}
+	// No login method is valid: the server then shows an error page, or
+	// lets everybody in with --allow-anonymous.
+	for _, args := range [][]string{nil, {"--allow-anonymous"}} {
+		c, err := Load(args, env(nil), io.Discard)
+		if err != nil || c.LoginConfigured() || c.AllowAnonymous != (args != nil) {
+			t.Errorf("%v: got %+v, %v", args, c, err)
 		}
 	}
 	c, err := Load([]string{"--oidc-issuer", "https://idp", "--oidc-client-id", "x", "--base-url", "https://a/",

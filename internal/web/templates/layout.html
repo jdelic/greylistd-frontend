@@ -20,10 +20,12 @@
     </nav>
     <div class="nc-spacer"></div>
     <span class="nc-user" title="{{.User}}">{{.User}}</span>
+    {{if not .Anonymous}}
     <form class="nc-inline-form" method="post" action="/logout">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
       <button type="submit" class="nc-nav nc-logout" data-shortcut="l" title="Logged in as {{.User}}"><u>L</u>ogout</button>
     </form>
+    {{end}}
     {{end}}
   </header>
   <main class="nc-content">

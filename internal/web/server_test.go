@@ -70,6 +70,13 @@ func (m *memGreylistd) list(d string) greylistd.List {
 
 func newTestServer(t *testing.T) (*httptest.Server, *memGreylistd) {
 	t.Helper()
+	return newTestServerWith(t, func(*Options) {})
+}
+
+// newTestServerWith starts a server with password login, after letting
+// configure change the options.
+func newTestServerWith(t *testing.T, configure func(*Options)) (*httptest.Server, *memGreylistd) {
+	t.Helper()
 	gl := &memGreylistd{entries: map[string]greylistd.Entry{}}
 	_ = gl.Add(context.Background(), greylistd.Grey, "grey.example")
 	_ = gl.Add(context.Background(), greylistd.Black, "bad.example")
@@ -77,13 +84,15 @@ func newTestServer(t *testing.T) (*httptest.Server, *memGreylistd) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := New(Options{
+	opt := Options{
 		Greylistd: gl,
 		Sessions:  &auth.Sessions{Signer: signer, TTL: time.Hour},
 		Password:  auth.NewPasswordChecker("admin", "secret"),
 		Log:       slog.New(slog.NewJSONHandler(io.Discard, nil)),
 		Version:   "test",
-	})
+	}
+	configure(&opt)
+	s, err := New(opt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,5 +287,94 @@ func TestLoginRateLimit(t *testing.T) {
 	l.reset("a")
 	if l.blocked("a") {
 		t.Fatal("reset failed")
+	}
+}
+
+func noRedirects(t *testing.T) *http.Client {
+	c := newClient(t)
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return c
+}
+
+func location(t *testing.T, c *http.Client, u string) (int, string) {
+	t.Helper()
+	resp, err := c.Get(u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	return resp.StatusCode, resp.Header.Get("Location")
+}
+
+func TestOIDCOnlyRedirectsToProvider(t *testing.T) {
+	ts, _ := newTestServerWith(t, func(o *Options) {
+		o.Password = auth.NewPasswordChecker("", "")
+		o.OIDC = auth.NewOIDC(auth.OIDCConfig{Issuer: "https://idp.invalid", AllowAnyUser: true})
+	})
+	c := noRedirects(t)
+	if code, loc := location(t, c, ts.URL+"/login"); code != http.StatusSeeOther || loc != "/auth/oidc/start" {
+		t.Fatalf("login page: %d %q", code, loc)
+	}
+	// After logging out the page is shown instead, or the IdP's session
+	// would log the user straight back in.
+	code, body := get(t, c, ts.URL+"/login?logged-out")
+	if code != http.StatusOK || !strings.Contains(body, "logged out") || !strings.Contains(body, "/auth/oidc/start") {
+		t.Fatalf("logged-out page: %d\n%s", code, body)
+	}
+	// With a password login as well, the user chooses.
+	ts, _ = newTestServerWith(t, func(o *Options) {
+		o.OIDC = auth.NewOIDC(auth.OIDCConfig{Issuer: "https://idp.invalid", AllowAnyUser: true})
+	})
+	if code, _ := location(t, c, ts.URL+"/login"); code != http.StatusOK {
+		t.Fatalf("login page with two methods: %d", code)
+	}
+}
+
+func TestNoLoginConfigured(t *testing.T) {
+	ts, _ := newTestServerWith(t, func(o *Options) { o.Password = nil })
+	c := noRedirects(t)
+	if code, loc := location(t, c, ts.URL+"/"); code != http.StatusSeeOther || loc != "/login" {
+		t.Fatalf("entries: %d %q", code, loc)
+	}
+	code, body := get(t, c, ts.URL+"/login")
+	if code != http.StatusServiceUnavailable || !strings.Contains(body, "No login method is configured") || strings.Contains(body, "<form") {
+		t.Fatalf("login page: %d\n%s", code, body)
+	}
+	if code, _ := post(t, c, ts.URL+"/login", url.Values{"username": {""}, "password": {""}}); code != http.StatusNotFound {
+		t.Fatalf("password login: %d", code)
+	}
+}
+
+func TestAnonymousAccess(t *testing.T) {
+	signer, _ := auth.NewSigner(nil)
+	sessions := &auth.Sessions{Signer: signer, TTL: time.Hour}
+	ts, gl := newTestServerWith(t, func(o *Options) {
+		o.Password, o.Anonymous, o.Sessions = nil, true, sessions
+	})
+	c := newClient(t)
+	code, body := get(t, c, ts.URL+"/")
+	if code != http.StatusOK || !strings.Contains(body, "entries-form") || strings.Contains(body, `action="/logout"`) {
+		t.Fatalf("entries: %d\n%s", code, body)
+	}
+	code, _ = post(t, c, ts.URL+"/entries/add", url.Values{"csrf": {csrf(t, body)}, "data": {"anon.example"}, "list": {"white"}})
+	if code != http.StatusOK || gl.list("anon.example") != greylistd.White {
+		t.Fatalf("add: %d %v", code, gl.list("anon.example"))
+	}
+	// Even anonymous changes need the CSRF token.
+	if code, _ := post(t, c, ts.URL+"/entries/add", url.Values{"data": {"x.example"}, "list": {"white"}}); code != http.StatusForbidden {
+		t.Fatalf("add without csrf: %d", code)
+	}
+	if code, loc := location(t, noRedirects(t), ts.URL+"/login"); code != http.StatusSeeOther || loc != "/" {
+		t.Fatalf("login page: %d %q", code, loc)
+	}
+
+	// The anonymous session is worthless once a login is required.
+	ts2, _ := newTestServerWith(t, func(o *Options) { o.Sessions = sessions })
+	u, _ := url.Parse(ts.URL)
+	u2, _ := url.Parse(ts2.URL)
+	c.Jar.SetCookies(u2, c.Jar.Cookies(u))
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	if code, loc := location(t, c, ts2.URL+"/"); code != http.StatusSeeOther || loc != "/login" {
+		t.Fatalf("anonymous session accepted with password login: %d %q", code, loc)
 	}
 }

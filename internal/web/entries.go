@@ -22,6 +22,8 @@ type pageData struct {
 	StaticTag string
 	Flash     *flash
 	Error     string
+	Message   string
+	Anonymous bool // no login, so no logout button
 
 	// login page
 	OIDCEnabled   bool

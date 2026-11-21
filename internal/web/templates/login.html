@@ -1,5 +1,6 @@
 {{define "login"}}{{template "head" .}}
 <section class="nc-panel nc-login" data-label="Login">
+  {{if .Message}}<div class="nc-msg nc-msg-ok" role="status">{{.Message}}</div>{{end}}
   {{if .Error}}<div class="nc-msg nc-msg-err" role="alert">{{.Error}}</div>{{end}}
   {{if .OIDCEnabled}}
   <a class="nc-button nc-button-wide" href="/auth/oidc/start" data-shortcut="o">Sign in with {{.OIDCName}}</a>

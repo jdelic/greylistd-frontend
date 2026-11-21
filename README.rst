@@ -69,12 +69,24 @@ Flag                       Default                        Meaning
 ``--oidc-provider-name``   ``OpenID Connect``             label of the login button
 ``--auth-username``                                       username of the optional password login
 ``--auth-password``                                       its password (use the environment variable)
+``--allow-anonymous``      ``false``                      without any login method: everybody gets full
+                                                          access (only behind other access control)
 =========================  =============================  ==================================================
 
-At least one login method must be configured. OIDC refuses to start without
-an allow list (e-mails and/or groups) unless ``--oidc-allow-any-user`` is set
-explicitly, because whoever can log in can change your mail server's
-greylisting.
+If OIDC is the only login method, the login page redirects straight to the
+identity provider (except right after logging out, so that the provider's
+session does not log you back in immediately). With a password login as well,
+the login page offers both.
+
+Without any login method the UI only shows an error saying so, unless
+``--allow-anonymous`` is set: then everybody who can reach the server has full
+access without logging in. Use that only when something else, such as a
+reverse proxy with its own authentication or a private network, controls
+access. ``--allow-anonymous`` cannot be combined with a login method.
+
+OIDC refuses to start without an allow list (e-mails and/or groups) unless
+``--oidc-allow-any-user`` is set explicitly, because whoever can log in can
+change your mail server's greylisting.
 
 The OIDC redirect URI to register with your provider is
 ``<base-url>/auth/oidc/callback``. The login uses the authorization code flow

@@ -90,6 +90,14 @@ func run() int {
 		TrustProxy: cfg.TrustProxy,
 		Version:    getVersion(),
 		DisplayTZ:  cfg.Location(),
+		Anonymous:  cfg.AllowAnonymous,
+	}
+	switch {
+	case cfg.AllowAnonymous:
+		log.Warn("no login required: everybody who can reach the server may manage greylistd (--allow-anonymous)")
+	case !cfg.LoginConfigured():
+		log.Error("no login method configured; the UI only shows an error",
+			"hint", "set --oidc-issuer and/or --auth-username/--auth-password, or --allow-anonymous")
 	}
 	if cfg.OIDCEnabled() {
 		opt.OIDC = auth.NewOIDC(auth.OIDCConfig{
@@ -136,7 +144,7 @@ func run() int {
 	errc := make(chan error, 1)
 	go func() {
 		log.Info("listening", "addr", cfg.Listen, "version", getVersion(), "socket", cfg.SocketPath,
-			"oidc", cfg.OIDCEnabled(), "password_login", cfg.PasswordEnabled())
+			"oidc", cfg.OIDCEnabled(), "password_login", cfg.PasswordEnabled(), "anonymous", cfg.AllowAnonymous)
 		errc <- httpSrv.ListenAndServe()
 	}()
 

@@ -11,32 +11,57 @@ import (
 const flowCookie = "glf_oidc"
 
 func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
-	if s.opt.Sessions.Get(r) != nil {
+	if s.opt.Anonymous || s.session(r) != nil {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	s.renderLogin(w, r, http.StatusOK, r.URL.Query().Get("error"))
+	if !s.loginConfigured() {
+		s.renderLogin(w, r, http.StatusServiceUnavailable, "No login method is configured. "+
+			"Configure OpenID Connect or a username and password, or allow access for everybody with --allow-anonymous.")
+		return
+	}
+	loggedOut := r.URL.Query().Has("logged-out")
+	// With OIDC as the only login method there is nothing to choose, so go
+	// straight to the identity provider. Not right after logging out, though:
+	// the provider's own session would log the user right back in.
+	if s.opt.OIDC != nil && !s.passwordEnabled() && !loggedOut {
+		http.Redirect(w, r, "/auth/oidc/start", http.StatusSeeOther)
+		return
+	}
+	s.renderLoginPage(w, r, http.StatusOK, "", loggedOut)
 }
 
 func (s *Server) renderLogin(w http.ResponseWriter, r *http.Request, status int, msg string) {
-	// The password form is posted before a session exists, so it carries a
-	// login-CSRF token bound to a cookie (double submit).
-	token := auth.RandomToken(18)
-	http.SetCookie(w, s.opt.Sessions.Cookie(loginCSRFCookie, token, 15*time.Minute))
-	s.render(w, r, status, "login", pageData{
+	s.renderLoginPage(w, r, status, msg, false)
+}
+
+func (s *Server) renderLoginPage(w http.ResponseWriter, r *http.Request, status int, msg string, loggedOut bool) {
+	data := pageData{
 		Title:         "Login",
 		Error:         msg,
 		OIDCEnabled:   s.opt.OIDC != nil,
 		OIDCName:      s.opt.OIDCName,
-		PasswordLogin: s.opt.Password != nil && s.opt.Password.Enabled(),
-		LoginCSRF:     token,
-	})
+		PasswordLogin: s.passwordEnabled(),
+	}
+	if loggedOut {
+		data.Message = "You have been logged out."
+	}
+	if !data.PasswordLogin {
+		s.render(w, r, status, "login", data)
+		return
+	}
+	// The password form is posted before a session exists, so it carries a
+	// login-CSRF token bound to a cookie (double submit).
+	token := auth.RandomToken(18)
+	http.SetCookie(w, s.opt.Sessions.Cookie(loginCSRFCookie, token, 15*time.Minute))
+	data.LoginCSRF = token
+	s.render(w, r, status, "login", data)
 }
 
 const loginCSRFCookie = "glf_login_csrf"
 
 func (s *Server) handlePasswordLogin(w http.ResponseWriter, r *http.Request) {
-	if s.opt.Password == nil || !s.opt.Password.Enabled() {
+	if !s.passwordEnabled() {
 		http.NotFound(w, r)
 		return
 	}
@@ -145,7 +170,11 @@ func displayName(id *auth.Identity) string {
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	sess := sessionFrom(r)
+	if sess.Method == methodAnonymous {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
 	s.opt.Sessions.End(w)
 	s.opt.Log.Info("logout", "user", sess.Name)
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	http.Redirect(w, r, "/login?logged-out", http.StatusSeeOther)
 }

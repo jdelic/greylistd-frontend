@@ -36,11 +36,14 @@ type Greylistd interface {
 
 // Options configures a Server.
 type Options struct {
-	Greylistd  Greylistd
-	Sessions   *auth.Sessions
-	OIDC       *auth.OIDC // nil if OIDC login is disabled
-	OIDCName   string
-	Password   *auth.PasswordChecker
+	Greylistd Greylistd
+	Sessions  *auth.Sessions
+	OIDC      *auth.OIDC // nil if OIDC login is disabled
+	OIDCName  string
+	Password  *auth.PasswordChecker
+	// Anonymous gives everybody access without logging in. Only valid when
+	// neither OIDC nor password login is configured.
+	Anonymous  bool
 	Log        *slog.Logger // application log
 	TrustProxy bool
 	Version    string
@@ -119,11 +122,51 @@ func sessionFrom(r *http.Request) *auth.Session {
 	return sess
 }
 
-// requireSession redirects anonymous users to the login page and enforces the
-// CSRF token on state-changing requests.
+// Session methods besides "oidc" and "password".
+const methodAnonymous = "anonymous"
+
+func (s *Server) passwordEnabled() bool { return s.opt.Password != nil && s.opt.Password.Enabled() }
+
+// loginConfigured reports whether any login method is configured.
+func (s *Server) loginConfigured() bool { return s.opt.OIDC != nil || s.passwordEnabled() }
+
+// session returns the request's session if it is valid and was created by a
+// login method that is still enabled, so that e.g. an anonymous session does
+// not survive switching from --allow-anonymous to a real login.
+func (s *Server) session(r *http.Request) *auth.Session {
+	sess := s.opt.Sessions.Get(r)
+	if sess == nil {
+		return nil
+	}
+	var ok bool
+	switch sess.Method {
+	case "oidc":
+		ok = s.opt.OIDC != nil
+	case "password":
+		ok = s.passwordEnabled()
+	case methodAnonymous:
+		ok = s.opt.Anonymous
+	}
+	if !ok {
+		return nil
+	}
+	return sess
+}
+
+// requireSession redirects users without a session to the login page and
+// enforces the CSRF token on state-changing requests. In anonymous mode a
+// session (which carries the CSRF token) is created on the first GET.
 func (s *Server) requireSession(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		sess := s.opt.Sessions.Get(r)
+		sess := s.session(r)
+		if sess == nil && s.opt.Anonymous && r.Method == http.MethodGet {
+			var err error
+			if sess, err = s.opt.Sessions.Start(w, methodAnonymous, methodAnonymous, methodAnonymous); err != nil {
+				s.opt.Log.Error("cannot start session", "error", err)
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+		}
 		if sess == nil {
 			if r.Method == http.MethodGet {
 				http.Redirect(w, r, "/login", http.StatusSeeOther)
@@ -166,6 +209,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, page
 	if sess := sessionFrom(r); sess != nil {
 		data.User = sess.Name
 		data.CSRF = sess.CSRF
+		data.Anonymous = sess.Method == methodAnonymous
 	}
 	var buf strings.Builder
 	if err := s.tmpl.ExecuteTemplate(&buf, page, data); err != nil {
