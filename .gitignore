@@ -1,3 +1,5 @@
 /greylistd-frontend
 /dist/
 *.env
+# The systemd example environment file contains no secrets.
+!/deploy/systemd/greylistd-frontend.env
