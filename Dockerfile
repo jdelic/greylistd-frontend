@@ -2,7 +2,7 @@
 
 # The build stage runs on the build host's platform and cross-compiles for the
 # target platform, so multi-arch builds don't need emulation for compiling.
-FROM --platform=$BUILDPLATFORM golang:1.26-trixie AS build
+FROM --platform=$BUILDPLATFORM golang:1.27-trixie AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
