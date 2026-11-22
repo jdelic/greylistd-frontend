@@ -1,6 +1,8 @@
 name: Release
 
-# Builds and pushes the container image for version tags (v1.2.3).
+# For version tags (v1.2.3): builds and pushes the container image, and
+# publishes static linux/amd64 and linux/arm64 binaries (tarballs with the
+# systemd unit example, plus SHA256SUMS) as a GitHub release for the tag.
 #
 # Registry configuration — set these as repository (or "release" environment)
 # variables and secrets under Settings → Secrets and variables → Actions:
@@ -102,5 +104,85 @@ jobs:
             echo
             echo '```'
             echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  binaries:
+    name: build ${{ matrix.goos }}/${{ matrix.goarch }} binary
+    needs: checks
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      # Static binary plus what is needed to run it under systemd. v1.2.3 ->
+      # greylistd-frontend_1.2.3_linux_amd64.tar.gz
+      - name: Build and package
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          name="greylistd-frontend_${version}_${GOOS}_${GOARCH}"
+          mkdir -p "dist/$name"
+          go build -trimpath -ldflags "-s -w -X main.version=${version}" \
+            -o "dist/$name/greylistd-frontend" ./cmd/greylistd-frontend
+          cp README.md README.rst "dist/$name/"
+          cp -r deploy/systemd "dist/$name/systemd"
+          tar -C dist -czf "dist/$name.tar.gz" --owner=0 --group=0 "$name"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  github-release:
+    name: publish GitHub release
+    needs: binaries
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: binary-*
+          path: dist
+          merge-multiple: true
+
+      # Creates the release for the tag (marked as pre-release for tags like
+      # v1.3.0-rc1), or replaces the files when the workflow is re-run.
+      - name: Create release and upload binaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cd dist
+          sha256sum -- *.tar.gz > SHA256SUMS
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" --clobber -- *.tar.gz SHA256SUMS
+          else
+            prerelease=()
+            [[ "$GITHUB_REF_NAME" == *-* ]] && prerelease=(--prerelease)
+            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes \
+              "${prerelease[@]}" -- *.tar.gz SHA256SUMS
+          fi
+          {
+            echo "### Published binaries"
+            echo
+            echo '```'
+            cat SHA256SUMS
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

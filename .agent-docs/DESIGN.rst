@@ -34,6 +34,7 @@ Config via flags or 12factor environment variables   ``internal/config``, `Confi
 Access log on stdout, JSON app log on stderr         ``internal/logging``, `Logging`_
 ``FROM scratch`` container                           ``Dockerfile``, `Packaging`_
 Example Nomad job                                    ``deploy/nomad/greylistd-frontend.nomad.hcl``
+Example systemd unit, release binaries               ``deploy/systemd``, `systemd`_
 Mobile-first, browser-friendly, artifactsd look      `User interface`_
 ===================================================  =============================================
 
@@ -363,6 +364,28 @@ Docker
   ``opensmtpd``, so deployments must run the container with that uid/gid
   (108:108 on the VM) and bind-mount ``/var/run/greylistd``.
 
+systemd
+-------
+
+The service must run on the greylistd host, which may have no container
+platform, so the release also ships static binaries and
+``deploy/systemd/greylistd-frontend.service`` plus an environment file:
+
+* **User:** ``DynamicUser=yes`` with ``SupplementaryGroups=`` set to the
+  socket's group (``opensmtpd`` in the example; Debian's default
+  ``greylistd.socket`` uses ``greylist``). Socket access through the group
+  avoids running as the mail daemon's user.
+* **Ordering:** ``After=``/``Wants=greylistd.socket``, because greylistd is
+  socket-activated on Debian.
+* **Secrets:** ``EnvironmentFile=/etc/greylistd-frontend/env`` (mode 0600,
+  read by systemd as root).
+* **Sandboxing:** ``ProtectSystem=strict``, no capabilities, restricted
+  address families (``AF_UNIX``/``AF_INET``/``AF_INET6``), and a
+  ``@system-service`` syscall filter. ``systemd-analyze security`` rates it
+  1.3. It was tested against the VM's greylistd (``/healthz`` 200).
+* **Time zone:** systemd sets no ``$TZ``, so the environment file sets
+  ``GREYLISTD_FRONTEND_TIMEZONE`` explicitly.
+
 Nomad
 -----
 
@@ -408,6 +431,14 @@ CI/CD (GitHub Actions)
     ``vars.PLATFORMS``, ``secrets.REGISTRY_USERNAME`` and
     ``secrets.REGISTRY_PASSWORD``. Unset values fall back to ghcr.io and
     ``GITHUB_TOKEN``.
+  * In parallel, a matrix job builds static ``linux/amd64`` and
+    ``linux/arm64`` binaries (``-trimpath``, version from the tag) and packs
+    each with the READMEs and ``deploy/systemd`` into
+    ``greylistd-frontend_<version>_linux_<arch>.tar.gz``. A second job, in
+    the ``release`` environment with ``contents: write``, creates the GitHub
+    release with ``gh release create --verify-tag --generate-notes`` and
+    uploads the tarballs and ``SHA256SUMS``. Tags containing ``-`` become
+    pre-releases, and a re-run replaces the files of an existing release.
 
 * ``dependabot.yml``: weekly, grouped updates for gomod (minor/patch) and
   github-actions.

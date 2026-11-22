@@ -25,6 +25,9 @@ docker run --user "$(id -u opensmtpd):$(id -g opensmtpd)" \
 
 - [README.rst](README.rst) — configuration reference, login modes, building,
   CI/releases, security notes
+- [deploy/systemd](deploy/systemd) — example systemd unit for the release
+  binaries (static `linux/amd64` and `linux/arm64` builds on each GitHub
+  release)
 - [deploy/nomad](deploy/nomad/greylistd-frontend.nomad.hcl) — example Nomad job
 - [.agent-docs/SPEC.rst](.agent-docs/SPEC.rst) — the original specification
 - [.agent-docs/DESIGN.rst](.agent-docs/DESIGN.rst) — design document:

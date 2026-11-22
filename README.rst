@@ -154,10 +154,17 @@ GitHub Actions (``.github/workflows``):
 
 ``release.yml``
     Runs on tags ``v*`` (e.g. ``git tag -a v0.1.0 -m "..." && git push --tags``).
-    It runs the CI checks first, then builds a multi-arch image
-    (``linux/amd64``, ``linux/arm64``) and pushes it tagged ``1.2.3``,
-    ``1.2``, ``1`` (not for ``0.x``) and ``latest`` (not for pre-releases such
-    as ``v1.3.0-rc1``).
+    It runs the CI checks first, then
+
+    * builds a multi-arch image (``linux/amd64``, ``linux/arm64``) and pushes
+      it tagged ``1.2.3``, ``1.2``, ``1`` (not for ``0.x``) and ``latest`` (not
+      for pre-releases such as ``v1.3.0-rc1``);
+    * builds static ``linux/amd64`` and ``linux/arm64`` binaries and publishes
+      them as a GitHub release for the tag (a pre-release for tags such as
+      ``v1.3.0-rc1``): ``greylistd-frontend_1.2.3_linux_amd64.tar.gz`` etc.
+      contain the binary, the READMEs and the systemd example from
+      ``deploy/systemd``; ``SHA256SUMS`` lists their checksums. Re-running the
+      workflow replaces the files of an existing release.
 
 The release job runs in the GitHub environment ``release`` and is configured
 under *Settings → Secrets and variables → Actions*, either repository-wide or
@@ -174,10 +181,39 @@ Name                       Kind      Meaning (default)
                                      which only works for ``ghcr.io``)
 =========================  ========  ===========================================
 
-With nothing configured, images go to ``ghcr.io/<owner>/<repo>``.
+With nothing configured, images go to ``ghcr.io/<owner>/<repo>``. The
+GitHub release needs no configuration; it uses ``GITHUB_TOKEN``.
 
 Dependabot (``.github/dependabot.yml``) opens weekly, grouped pull requests
 for Go module and GitHub Actions updates.
+
+systemd
+-------
+
+greylistd-frontend has to run on the mail server, next to greylistd's socket.
+Without a container platform there, run the release binary as a systemd
+service. ``deploy/systemd`` has an example unit and environment file::
+
+    tar xzf greylistd-frontend_1.2.3_linux_amd64.tar.gz
+    cd greylistd-frontend_1.2.3_linux_amd64
+    install -m 0755 greylistd-frontend /usr/local/bin/
+    install -m 0644 systemd/greylistd-frontend.service /etc/systemd/system/
+    install -d -m 0750 /etc/greylistd-frontend
+    install -m 0600 systemd/greylistd-frontend.env /etc/greylistd-frontend/env
+    $EDITOR /etc/greylistd-frontend/env
+    systemctl daemon-reload && systemctl enable --now greylistd-frontend
+
+The unit runs the service as a ``DynamicUser`` whose only extra right is
+membership in the socket's group, with systemd's sandboxing options switched
+on. Debian's ``greylistd.socket`` uses group ``greylist``; setups with
+opensmtpd-filter-greylistd usually change it to ``opensmtpd``, which is what
+the example assumes. Adjust ``SupplementaryGroups=`` to
+``stat -c %G /var/run/greylistd/socket``.
+
+Set ``GREYLISTD_FRONTEND_TIMEZONE`` in the environment file: systemd services
+get no ``$TZ``, so the frontend would otherwise read greylistd's timestamps as
+UTC. The example listens on ``127.0.0.1:8080`` for a reverse proxy on the same
+host.
 
 Nomad
 -----

@@ -1,0 +1,69 @@
+# Example systemd unit for greylistd-frontend running next to greylistd.
+#
+# Install:
+#   install -m 0755 greylistd-frontend /usr/local/bin/
+#   install -m 0644 greylistd-frontend.service /etc/systemd/system/
+#   install -d -m 0750 /etc/greylistd-frontend
+#   install -m 0600 greylistd-frontend.env /etc/greylistd-frontend/env
+#   # edit /etc/greylistd-frontend/env, then:
+#   systemctl daemon-reload && systemctl enable --now greylistd-frontend
+#
+# Assumptions (adapt to your host):
+#   * greylistd's socket is /var/run/greylistd/socket, mode 0660. Debian's
+#     greylistd.socket gives it group "greylist"; with opensmtpd-filter-greylistd
+#     a drop-in usually changes that to "opensmtpd". Set SupplementaryGroups=
+#     below to the socket's group (stat -c %G /var/run/greylistd/socket).
+#   * A reverse proxy on the same host terminates TLS and forwards to
+#     127.0.0.1:8080 (GREYLISTD_FRONTEND_LISTEN in the env file).
+
+[Unit]
+Description=greylistd-frontend web interface for greylistd
+Documentation=https://github.com/jdelic/greylistd-frontend
+# greylistd is socket-activated: the socket is all this service needs.
+After=network.target greylistd.socket
+Wants=greylistd.socket
+
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/greylistd-frontend
+# Secrets and settings as GREYLISTD_FRONTEND_* variables. systemd reads this
+# file as root before dropping privileges, so it can stay mode 0600 root.
+EnvironmentFile=/etc/greylistd-frontend/env
+Restart=on-failure
+RestartSec=5s
+
+# Run as a throw-away system user that may only talk to greylistd's socket
+# through its group (see the assumptions above).
+DynamicUser=yes
+SupplementaryGroups=opensmtpd
+
+# Sandboxing. The service needs nothing but the socket and the network.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHostname=yes
+ProtectClock=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
