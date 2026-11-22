@@ -10,6 +10,13 @@ updates:
         patterns: ["*"]
         update-types: ["minor", "patch"]
 
+  # The Go version in the Dockerfile's build stage must keep up with the
+  # "go" line in go.mod, which gomod updates can raise.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

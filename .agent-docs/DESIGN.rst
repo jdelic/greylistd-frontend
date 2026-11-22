@@ -42,7 +42,7 @@ Mobile-first, browser-friendly, artifactsd look      `User interface`_
 Architecture
 ============
 
-One static Go binary (Go 1.25, ``CGO_ENABLED=0``). Templates, CSS, JS, the
+One static Go binary (Go version per ``go.mod``, ``CGO_ENABLED=0``). Templates, CSS, JS, the
 favicon and the font are embedded with ``embed``, and so is the time zone
 database (``time/tzdata``), because a scratch image has no
 ``/usr/share/zoneinfo``.
@@ -354,7 +354,7 @@ Docker
 ------
 
 * **Build:** a multi-stage build. The build stage is
-  ``golang:1.25-trixie`` with ``--platform=$BUILDPLATFORM``, cross-compiling
+  ``golang:1.26-trixie`` with ``--platform=$BUILDPLATFORM``, cross-compiling
   via ``TARGETOS``/``TARGETARCH``, so arm64 images build without emulating
   the compiler. ``-trimpath`` is used, and ``VERSION`` is set via ldflags.
 * **Runtime:** ``FROM scratch`` containing only the binary and
@@ -441,7 +441,9 @@ CI/CD (GitHub Actions)
     pre-releases, and a re-run replaces the files of an existing release.
 
 * ``dependabot.yml``: weekly, grouped updates for gomod (minor/patch) and
-  github-actions.
+  github-actions, plus the Dockerfile's base image (docker), because a gomod
+  update can raise the ``go`` line in ``go.mod`` beyond the build image's Go
+  version.
 
 
 Security summary
