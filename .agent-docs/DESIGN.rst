@@ -34,7 +34,7 @@ Config via flags or 12factor environment variables   ``internal/config``, `Confi
 Access log on stdout, JSON app log on stderr         ``internal/logging``, `Logging`_
 ``FROM scratch`` container                           ``Dockerfile``, `Packaging`_
 Example Nomad job                                    ``deploy/nomad/greylistd-frontend.nomad.hcl``
-Example systemd unit, release binaries               ``deploy/systemd``, `systemd`_
+Example systemd unit, release binaries, .deb         ``deploy/systemd``, ``Makefile``, `systemd`_
 Mobile-first, browser-friendly, artifactsd look      `User interface`_
 ===================================================  =============================================
 
@@ -431,14 +431,34 @@ CI/CD (GitHub Actions)
     ``vars.PLATFORMS``, ``secrets.REGISTRY_USERNAME`` and
     ``secrets.REGISTRY_PASSWORD``. Unset values fall back to ghcr.io and
     ``GITHUB_TOKEN``.
-  * In parallel, a matrix job builds static ``linux/amd64`` and
-    ``linux/arm64`` binaries (``-trimpath``, version from the tag) and packs
-    each with the READMEs and ``deploy/systemd`` into
-    ``greylistd-frontend_<version>_linux_<arch>.tar.gz``. A second job, in
-    the ``release`` environment with ``contents: write``, creates the GitHub
+  * In parallel, a matrix job runs ``make dist deb`` for ``linux/amd64``
+    and ``linux/arm64`` (version from the tag): a tarball with the static
+    binary, the READMEs and the systemd example, and a .deb built with fpm
+    (installed with ``gem install fpm -v 1.18.0``). A second job, in the
+    ``release`` environment with ``contents: write``, creates the GitHub
     release with ``gh release create --verify-tag --generate-notes`` and
-    uploads the tarballs and ``SHA256SUMS``. Tags containing ``-`` become
-    pre-releases, and a re-run replaces the files of an existing release.
+    uploads tarballs, packages and ``SHA256SUMS``. Tags containing ``-``
+    become pre-releases, and a re-run replaces the files of an existing
+    release.
+
+Makefile and Debian package
+---------------------------
+
+The ``Makefile`` wraps ``build``, ``test``, ``lint``, ``dist``, ``deb``,
+``checksums`` and ``docker``. ``GOARCH`` selects the target architecture;
+``VERSION`` defaults to ``git describe`` of the latest ``v*`` tag.
+
+``make deb`` follows opensmtpd-filter-greylistd's fpm recipe (``-s dir -t
+deb``, same maintainer, ``Depends: greylistd``). Files are staged with
+explicit modes and installed under ``/usr/local/greylistd-frontend``:
+``bin/greylistd-frontend``, ``example/`` (unit and environment file) and
+``README.rst``. The package activates nothing; the example unit's
+``ExecStart`` points at the package's binary path, so it works as shipped.
+Debian versions map ``-`` to ``~`` (``1.3.0-rc1`` → ``1.3.0~rc1``, sorting
+before ``1.3.0``) and post-tag builds to ``+gitN.SHA``; the iteration defaults
+to ``0`` as in filter-greylistd. Installing to ``/usr/local`` from a package
+is against Debian policy (§9.1.2) but was asked for explicitly, keeping
+everything of this service in one directory.
 
 * ``dependabot.yml``: weekly, grouped updates for gomod (minor/patch) and
   github-actions, plus the Dockerfile's base image (docker), because a gomod

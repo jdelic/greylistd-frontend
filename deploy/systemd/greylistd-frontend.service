@@ -1,7 +1,8 @@
 # Example systemd unit for greylistd-frontend running next to greylistd.
 #
-# Install:
-#   install -m 0755 greylistd-frontend /usr/local/bin/
+# Install (the .deb from `make deb` already put the binary in place and this
+# file in /usr/local/greylistd-frontend/example/):
+#   install -D -m 0755 greylistd-frontend /usr/local/greylistd-frontend/bin/greylistd-frontend
 #   install -m 0644 greylistd-frontend.service /etc/systemd/system/
 #   install -d -m 0750 /etc/greylistd-frontend
 #   install -m 0600 greylistd-frontend.env /etc/greylistd-frontend/env
@@ -25,7 +26,7 @@ Wants=greylistd.socket
 
 [Service]
 Type=exec
-ExecStart=/usr/local/bin/greylistd-frontend
+ExecStart=/usr/local/greylistd-frontend/bin/greylistd-frontend
 # Secrets and settings as GREYLISTD_FRONTEND_* variables. systemd reads this
 # file as root before dropping privileges, so it can stay mode 0600 root.
 EnvironmentFile=/etc/greylistd-frontend/env
