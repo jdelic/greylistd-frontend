@@ -1,8 +1,9 @@
 name: Release
 
 # For version tags (v1.2.3): builds and pushes the container image, and
-# publishes static linux/amd64 and linux/arm64 binaries (tarballs with the
-# systemd unit example, plus SHA256SUMS) as a GitHub release for the tag.
+# publishes static linux/amd64 and linux/arm64 builds (tarballs with the
+# systemd unit example, .deb packages, plus SHA256SUMS) as a GitHub release
+# for the tag. The builds use the Makefile's dist and deb targets.
 #
 # Registry configuration — set these as repository (or "release" environment)
 # variables and secrets under Settings → Secrets and variables → Actions:
@@ -125,27 +126,23 @@ jobs:
           go-version-file: go.mod
           check-latest: true
 
-      # Static binary plus what is needed to run it under systemd. v1.2.3 ->
-      # greylistd-frontend_1.2.3_linux_amd64.tar.gz
-      - name: Build and package
+      - name: Install fpm
+        run: sudo gem install --no-document fpm -v 1.18.0
+
+      # v1.2.3 -> greylistd-frontend_1.2.3_linux_amd64.tar.gz and
+      # greylistd-frontend_1.2.3-0_amd64.deb
+      - name: Build tarball and Debian package
         env:
-          CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          name="greylistd-frontend_${version}_${GOOS}_${GOARCH}"
-          mkdir -p "dist/$name"
-          go build -trimpath -ldflags "-s -w -X main.version=${version}" \
-            -o "dist/$name/greylistd-frontend" ./cmd/greylistd-frontend
-          cp README.md README.rst "dist/$name/"
-          cp -r deploy/systemd "dist/$name/systemd"
-          tar -C dist -czf "dist/$name.tar.gz" --owner=0 --group=0 "$name"
+        run: make dist deb VERSION="${GITHUB_REF_NAME#v}"
 
       - uses: actions/upload-artifact@v7
         with:
           name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/*.tar.gz
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
           if-no-files-found: error
 
   github-release:
@@ -170,14 +167,14 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           cd dist
-          sha256sum -- *.tar.gz > SHA256SUMS
+          sha256sum -- *.tar.gz *.deb > SHA256SUMS
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" --clobber -- *.tar.gz SHA256SUMS
+            gh release upload "$GITHUB_REF_NAME" --clobber -- *.tar.gz *.deb SHA256SUMS
           else
             prerelease=()
             [[ "$GITHUB_REF_NAME" == *-* ]] && prerelease=(--prerelease)
             gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes \
-              "${prerelease[@]}" -- *.tar.gz SHA256SUMS
+              "${prerelease[@]}" -- *.tar.gz *.deb SHA256SUMS
           fi
           {
             echo "### Published binaries"

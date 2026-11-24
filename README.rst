@@ -115,7 +115,34 @@ callback and ``/static/`` requires a session.
 Building
 --------
 
-::
+The ``Makefile`` wraps building and packaging (``make help`` lists the
+targets)::
+
+    make build       # static binary for the host -> dist/build/linux_<arch>/
+    make test        # go vet + go test -race
+    make lint        # golangci-lint
+    make dist        # release tarball: binary, READMEs, systemd example
+    make deb         # Debian package (needs fpm: gem install fpm)
+    make checksums   # dist/SHA256SUMS
+    make docker      # container image
+
+``GOARCH=arm64`` cross-builds for arm64, for example
+``make GOARCH=arm64 deb``. The version comes from the latest ``v*`` tag (after
+a tag: ``1.2.3-4-gabc123``, without one: ``0.0.0-dev``); override it with
+``VERSION=1.2.3``. ``make version`` prints it and the matching Debian version
+(``1.3.0-rc1`` becomes ``1.3.0~rc1``).
+
+The Debian package is built with `fpm`_ like opensmtpd-filter-greylistd's and
+installs to ``/usr/local/greylistd-frontend``:
+
+* ``bin/greylistd-frontend``, the binary;
+* ``example/greylistd-frontend.service`` and ``example/greylistd-frontend.env``,
+  the systemd example (see `systemd`_);
+* ``README.rst``.
+
+It depends on ``greylistd`` and does not install or start a service by itself.
+
+Without make::
 
     go build -o greylistd-frontend ./cmd/greylistd-frontend
     go test ./...
@@ -192,16 +219,34 @@ systemd
 
 greylistd-frontend has to run on the mail server, next to greylistd's socket.
 Without a container platform there, run the release binary as a systemd
-service. ``deploy/systemd`` has an example unit and environment file::
+service. ``deploy/systemd`` has an example unit and environment file. The unit
+expects the binary at ``/usr/local/greylistd-frontend/bin/greylistd-frontend``.
+
+From the Debian package (``make deb``, see `Building`_), which installs the
+binary there and the examples to ``/usr/local/greylistd-frontend/example/``::
+
+    apt install ./greylistd-frontend_1.2.3-0_amd64.deb
+    cd /usr/local/greylistd-frontend/example
+    install -m 0644 greylistd-frontend.service /etc/systemd/system/
+    install -d -m 0750 /etc/greylistd-frontend
+    install -m 0600 greylistd-frontend.env /etc/greylistd-frontend/env
+    $EDITOR /etc/greylistd-frontend/env
+    systemctl daemon-reload && systemctl enable --now greylistd-frontend
+
+From a release tarball::
 
     tar xzf greylistd-frontend_1.2.3_linux_amd64.tar.gz
     cd greylistd-frontend_1.2.3_linux_amd64
-    install -m 0755 greylistd-frontend /usr/local/bin/
+    install -D -m 0755 greylistd-frontend /usr/local/greylistd-frontend/bin/greylistd-frontend
     install -m 0644 systemd/greylistd-frontend.service /etc/systemd/system/
     install -d -m 0750 /etc/greylistd-frontend
     install -m 0600 systemd/greylistd-frontend.env /etc/greylistd-frontend/env
     $EDITOR /etc/greylistd-frontend/env
     systemctl daemon-reload && systemctl enable --now greylistd-frontend
+
+The package does not enable anything by itself: the unit stays an example
+until you copy it, so upgrading the package never overwrites your edited unit
+or environment file. Restart the service after an upgrade.
 
 The unit runs the service as a ``DynamicUser`` whose only extra right is
 membership in the socket's group, with systemd's sandboxing options switched
@@ -248,4 +293,5 @@ Peter Hull, licensed under the SIL Open Font License 1.1.
 .. _greylistd(8): https://packages.debian.org/trixie/greylistd
 .. _opensmtpd-filter-greylistd: https://github.com/jdelic/opensmtpd-filter-greylistd
 .. _golangci-lint: https://golangci-lint.run/
+.. _fpm: https://github.com/jordansissel/fpm
 .. _VT323: https://fonts.google.com/specimen/VT323
